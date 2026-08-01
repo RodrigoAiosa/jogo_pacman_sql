@@ -62,17 +62,18 @@ if "last_result" not in st.session_state:
     st.session_state.last_result = None
 
 if "query_text" not in st.session_state:
-    st.session_state.query_text = (
-        "SELECT\n"
-        "    -- escreva sua query aqui\n"
-        "    coluna AS resultado_nome,\n"
-        "    agregacao(...) AS resultado_valor\n"
-        "FROM tb_Vendas v\n"
-        "-- JOIN ...\n"
-        "-- WHERE ...\n"
-        "-- GROUP BY ...\n"
-        "-- ORDER BY resultado_valor DESC;"
-    )
+    st.session_state.query_text = ""
+
+QUERY_PLACEHOLDER = (
+    "SELECT\n"
+    "    coluna AS resultado_nome,\n"
+    "    agregacao(...) AS resultado_valor\n"
+    "FROM tb_Vendas v\n"
+    "-- JOIN ...\n"
+    "-- WHERE ...\n"
+    "-- GROUP BY ...\n"
+    "-- ORDER BY resultado_valor DESC;"
+)
 
 mission = st.session_state.mission
 requirements = build_requirements(mission)
@@ -99,6 +100,7 @@ if st.session_state.stage == "missao":
     st.session_state.query_text = st.text_area(
         "QUERY.SQL",
         value=st.session_state.query_text,
+        placeholder=QUERY_PLACEHOLDER,
         height=190,
         label_visibility="collapsed",
     )
