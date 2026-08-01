@@ -9,6 +9,8 @@ jogo abre como um fliperama synthwave (magenta/ciano) de verdade. O
 contraste entre as duas fases e a assinatura visual do projeto.
 """
 
+import re
+
 FONT_IMPORT = (
     "https://fonts.googleapis.com/css2?"
     "family=Press+Start+2P&family=JetBrains+Mono:wght@400;500;700&"
@@ -91,6 +93,10 @@ body, .stMarkdown, p, li, span {{ color: var(--text-soft); font-family: var(--fo
 .mission-hint {{
     font-family: var(--font-mono); font-size: 12.5px; color: var(--amber-dim);
     border-left: 2px solid var(--amber-dim); padding-left: 10px; margin-top: 14px;
+}}
+.mission-hint code, .mission-title code, p code {{
+    background: rgba(255,179,0,0.10); color: var(--amber);
+    padding: 1px 5px; border-radius: 4px; font-family: var(--font-mono);
 }}
 
 /* ---------- checklist de requisitos ---------- */
@@ -189,6 +195,12 @@ body, .stMarkdown, p, li, span {{ color: var(--text-soft); font-family: var(--fo
 </style>
 <div class="crt-overlay"></div>
 """
+
+
+def inline_code(text: str) -> str:
+    """Converte `trecho` (estilo markdown) em <code>trecho</code>. Necessario
+    porque o HTML e injetado via st.html(), que nao roda o parser de Markdown."""
+    return re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
 
 
 def render_terminal_header(label: str) -> str:
