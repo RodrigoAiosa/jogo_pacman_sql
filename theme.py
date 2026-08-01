@@ -129,6 +129,9 @@ body, .stMarkdown, p, li, span {{ color: var(--text-soft); font-family: var(--fo
     border-color: var(--amber) !important;
     box-shadow: 0 0 0 1px var(--amber), 0 0 18px var(--amber-glow) !important;
 }}
+[data-testid="stTextArea"] textarea::placeholder {{
+    color: var(--amber-dim) !important; opacity: 0.85 !important;
+}}
 
 /* ---------- botoes estilo arcade ---------- */
 [data-testid="stButton"] button, [data-testid="stFormSubmitButton"] button {{
