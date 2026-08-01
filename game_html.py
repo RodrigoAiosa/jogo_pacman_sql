@@ -1,17 +1,15 @@
 """
 game_html.py
-Monta o HTML/CSS/JS do mini Pac-Man (renderizado em <canvas>) que roda
-dentro do Streamlit via streamlit.components.v1.html.
+Monta o HTML/CSS/JS de um Pac-Man classico (renderizado em <canvas>) que
+roda dentro do Streamlit via streamlit.components.v1.html.
+
+Sem missao SQL, sem bonus numerado: e o jogo classico puro --
+pastilhas normais, 4 pastilhas de poder (power pellets) que deixam os
+fantasmas vulneraveis por alguns segundos, e tunel lateral.
 
 Identidade visual: gabinete de fliperama synthwave -- paredes do labirinto
 em gradiente ciano->magenta, HUD em fonte pixel, moldura CRT com scanlines,
 Pac-Man com boca animada e fantasmas com olhos que seguem o jogador.
-
-A "torcao" do jogo: existem bonus numerados (1, 2, 3...) espalhados no
-labirinto. Eles correspondem, em ordem, ao resultado da query SQL que o
-jogador resolveu na missao. O jogador so consegue "comer" o bonus de
-numero N depois de ja ter comido o bonus N-1 -- ou seja, ele precisa
-respeitar a mesma ordem (ORDER BY) que a query correta produziu.
 """
 
 import json
@@ -24,12 +22,8 @@ MAZE_COLS = 28
 MAZE_ROWS = 31
 TILE_PX = 20  # 28*20=560 x 31*20=620, mantendo a proporcao original
 
-# Posicoes fixas (linha, coluna) para ate 6 bonus no labirinto 28x31.
-# Cantos do anel externo + centro-cima/centro-baixo, todos garantidamente
-# caminho no layout gerado por _build_maze().
-BONUS_POSITIONS = [
-    (1, 1), (1, 26), (9, 13), (22, 14), (29, 1), (29, 26),
-]
+# 4 pastilhas de poder, uma perto de cada canto do anel externo
+POWER_PELLET_POSITIONS = [(2, 2), (2, 25), (28, 2), (28, 25)]
 
 # Codigos de celula do labirinto:
 #   0 = caminho com pastilha (dot)
@@ -47,12 +41,11 @@ def _build_maze() -> List[List[int]]:
     classico (nao e uma copia do mapa da Namco, que e uma obra protegida
     por direitos autorais): anel externo percorrivel, tunel lateral que
     teleporta de um lado para o outro, casa de fantasmas central com
-    portao, e blocos internos simetricos em varias faixas.
+    portao, e blocos internos simetricos.
     """
     cols, rows = MAZE_COLS, MAZE_ROWS
     maze = [[WALL for _ in range(cols)] for _ in range(rows)]
 
-    # anel externo (linha/coluna 1 ate rows-2/cols-2) todo caminho
     for c in range(1, cols - 1):
         maze[1][c] = PATH_DOT
         maze[rows - 2][c] = PATH_DOT
@@ -60,16 +53,12 @@ def _build_maze() -> List[List[int]]:
         maze[r][1] = PATH_DOT
         maze[r][cols - 2] = PATH_DOT
 
-    # interior: caminho livre por padrao, depois "esculpimos" os blocos
     for r in range(2, rows - 2):
         for c in range(2, cols - 2):
             maze[r][c] = PATH_DOT
 
-    # blocos internos simetricos (espelhados esquerda/direita), em duas
-    # faixas de linhas (topo e fundo), deixando a faixa central (onde fica
-    # a casa dos fantasmas e o corredor de acesso a ela) totalmente livre
     block_rows = [(3, 6), (24, 27)]
-    block_col_groups = [(2, 4), (7, 9)]  # espelhados no lado direito
+    block_col_groups = [(2, 4), (7, 9)]
     for r0, r1 in block_rows:
         for c0, c1 in block_col_groups:
             for r in range(r0, r1 + 1):
@@ -78,8 +67,6 @@ def _build_maze() -> List[List[int]]:
                     mirror_c = cols - 1 - c
                     maze[r][mirror_c] = WALL
 
-    # casa dos fantasmas (colunas 12..15, linhas 14..18) com portao de 2
-    # celulas no topo
     house_c0, house_c1 = 12, 15
     house_r0, house_r1 = 14, 18
     for c in range(house_c0, house_c1 + 1):
@@ -91,10 +78,9 @@ def _build_maze() -> List[List[int]]:
     for r in range(house_r0 + 1, house_r1):
         for c in range(house_c0 + 1, house_c1):
             maze[r][c] = PATH_EMPTY
-    maze[house_r0][13] = PATH_EMPTY  # portao (gate), 2 celulas no topo
+    maze[house_r0][13] = PATH_EMPTY
     maze[house_r0][14] = PATH_EMPTY
 
-    # tunel: linha do meio, abre as bordas para teleporte lateral
     tunnel_row = rows // 2
     maze[tunnel_row][0] = PATH_EMPTY
     maze[tunnel_row][cols - 1] = PATH_EMPTY
@@ -102,25 +88,21 @@ def _build_maze() -> List[List[int]]:
     return maze
 
 
-def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
-    """
-    sequence_labels: lista de nomes (na ordem correta) vinda da query do
-    jogador, ex: ["Ana Souza", "Bruno Lima", ...]. Define quantos e quais
-    bonus numerados existem no labirinto.
-    """
-    n_bonus = min(len(sequence_labels), len(BONUS_POSITIONS))
-    bonuses = []
-    for i in range(n_bonus):
-        r, c = BONUS_POSITIONS[i]
-        bonuses.append({"row": r, "col": c, "number": i + 1, "label": sequence_labels[i]})
-
+def build_game_html() -> str:
+    """Gera o HTML/CSS/JS completo do jogo classico (sem parametros de
+    missao -- e so o Pac-Man puro)."""
     maze = _build_maze()
 
     data = {
         "maze": maze,
-        "bonuses": bonuses,
+        "powerPellets": [{"row": r, "col": c} for r, c in POWER_PELLET_POSITIONS],
         "playerStart": {"row": 25, "col": 13},
-        "ghostStarts": [{"row": 16, "col": 13}, {"row": 16, "col": 14}],
+        "ghostStarts": [
+            {"row": 16, "col": 13, "color": "#ff2e63"},
+            {"row": 16, "col": 14, "color": "#08d9d6"},
+            {"row": 15, "col": 13, "color": "#ffb347"},
+            {"row": 15, "col": 14, "color": "#ff8cff"},
+        ],
     }
     data_json = json.dumps(data)
 
@@ -133,6 +115,7 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
       --magenta: #ff2e63;
       --gold: #ffd54f;
       --ok-green: #3ddc84;
+      --scared: #2b4bff;
       font-family: 'JetBrains Mono', monospace;
       color: #f4f4f4;
       background: radial-gradient(ellipse at 50% 0%, #1a1030 0%, #05040c 65%);
@@ -154,7 +137,7 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
       mix-blend-mode: multiply;
     }
     #pacman-hud {
-      width: 100%; max-width: 620px;
+      width: 100%; max-width: 600px;
       display: flex; justify-content: space-between; align-items: center;
       margin-bottom: 10px; font-size: 13px; z-index: 2;
       background: rgba(0,0,0,0.35); border: 1px solid rgba(8,217,214,0.35);
@@ -165,12 +148,6 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
       font-variant-numeric: tabular-nums; letter-spacing: 2px;
       color: var(--ok-green); text-shadow: 0 0 8px rgba(61,220,132,0.6);
     }
-    #hud-sequence b { color: var(--gold); text-shadow: 0 0 8px rgba(255,213,79,0.5); }
-    #pacman-legend {
-      max-width: 620px; width: 100%; font-size: 12px; margin-bottom: 10px;
-      color: #cfd3da; line-height: 1.6; z-index: 2; text-align: center;
-    }
-    #pacman-legend b { color: var(--gold); }
     .canvas-frame {
       position: relative; z-index: 2;
       padding: 10px;
@@ -201,11 +178,8 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
 
   <div id="pacman-hud">
     <div>PONTOS <span class="score-val" id="hud-score">0000</span></div>
-    <div id="hud-sequence">BONUS &rarr; <b>1</b></div>
     <div class="lives" id="hud-lives">● ● ●</div>
   </div>
-
-  <div id="pacman-legend"></div>
 
   <div class="canvas-frame">
     <canvas id="pacman-canvas" width="560" height="620"></canvas>
@@ -222,39 +196,25 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
   const maze = GAME_DATA.maze;
   const rows = maze.length;
   const cols = maze[0].length;
+  const SCARED_TICKS = 45; // ~7s a 160ms por tick
 
   const canvas = document.getElementById("pacman-canvas");
   const ctx = canvas.getContext("2d");
   const scoreEl = document.getElementById("hud-score");
   const livesEl = document.getElementById("hud-lives");
-  const seqEl = document.getElementById("hud-sequence");
   const msgEl = document.getElementById("pacman-msg");
   const restartBtn = document.getElementById("pacman-restart");
-  const legendEl = document.getElementById("pacman-legend");
 
-  // gradiente synthwave para as paredes (ciano no topo -> magenta embaixo)
   const wallGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
   wallGradient.addColorStop(0, "#08d9d6");
   wallGradient.addColorStop(1, "#ff2e63");
 
-  if (GAME_DATA.bonuses.length > 0) {
-    let legendHtml = "<b>SEQUENCIA DE BONUS (ordem da sua query):</b><br>";
-    legendHtml += GAME_DATA.bonuses.map(b => (b.number + ") " + b.label)).join(" &rarr; ");
-    legendEl.innerHTML = legendHtml;
-  } else {
-    legendEl.innerHTML = "<b>Nenhum bonus numerado disponivel.</b>";
-  }
-
-  let dots = [], bonuses = [], player, ghosts, dir, nextDir;
-  let score, lives, nextExpected, gameOver, tickHandle, frame = 0;
+  let dots = [], pellets = [], player, ghosts, dir, nextDir;
+  let score, lives, gameOver, tickHandle, frame = 0;
 
   function cellIsPath(r, c) {
     if (r < 0 || r >= rows || c < 0 || c >= cols) return false;
     return maze[r][c] === 0 || maze[r][c] === 3;
-  }
-
-  function isWallCell(r, c) {
-    return maze[r][c] === 1 || maze[r][c] === 2;
   }
 
   function resetState() {
@@ -264,35 +224,23 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
         if (maze[r][c] === 0) dots.push({row: r, col: c});
       }
     }
-    bonuses = GAME_DATA.bonuses.map(b => ({...b, collected: false}));
-    dots = dots.filter(d => !bonuses.some(b => b.row === d.row && b.col === d.col));
+    pellets = GAME_DATA.powerPellets.map(p => ({...p, collected: false}));
+    dots = dots.filter(d => !pellets.some(p => p.row === d.row && p.col === d.col));
     const ps = GAME_DATA.playerStart;
     dots = dots.filter(d => !(d.row === ps.row && d.col === ps.col));
 
-    player = {row: ps.row, col: ps.col, facing: "left", mouthPhase: 0};
-    ghosts = GAME_DATA.ghostStarts.map((g, i) => ({
-      row: g.row, col: g.col, color: i === 0 ? "#ff2e63" : "#08d9d6", facing: "up",
+    player = {row: ps.row, col: ps.col, facing: "left"};
+    ghosts = GAME_DATA.ghostStarts.map(g => ({
+      row: g.row, col: g.col, homeRow: g.row, homeCol: g.col,
+      color: g.color, facing: "up", scared: false, scaredTimer: 0,
     }));
     dir = null; nextDir = null;
-    score = 0; lives = 3; nextExpected = 1; gameOver = false;
+    score = 0; lives = 3; gameOver = false;
 
     scoreEl.textContent = String(score).padStart(4, "0");
     livesEl.textContent = "● ".repeat(lives).trim();
-    updateSeqHud();
     msgEl.textContent = "SETAS OU WASD PARA JOGAR";
     restartBtn.style.display = "none";
-  }
-
-  function updateSeqHud() {
-    const remaining = bonuses.filter(b => !b.collected);
-    if (bonuses.length === 0) {
-      seqEl.innerHTML = "";
-    } else if (remaining.length === 0) {
-      seqEl.innerHTML = "BONUS &rarr; <b>completo!</b>";
-    } else {
-      const nextB = bonuses.find(b => b.number === nextExpected);
-      seqEl.innerHTML = "BONUS &rarr; <b>" + (nextB ? nextB.number : "-") + "</b>";
-    }
   }
 
   function tryMove(entity, direction) {
@@ -302,7 +250,6 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
     else if (direction === "left") col -= 1;
     else if (direction === "right") col += 1;
 
-    // tunel: sair por uma borda lateral aberta teleporta para o outro lado
     if (col < 0 && cellIsPath(row, cols - 1)) return {row, col: cols - 1};
     if (col >= cols && cellIsPath(row, 0)) return {row, col: 0};
 
@@ -323,14 +270,20 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
 
   function moveGhosts() {
     ghosts.forEach(g => {
+      if (g.scared) {
+        g.scaredTimer -= 1;
+        if (g.scaredTimer <= 0) g.scared = false;
+      }
       const options = ["up", "down", "left", "right"].map(d => ({d, pos: tryMove(g, d)})).filter(o => o.pos);
       if (options.length === 0) return;
       let choice;
-      if (Math.random() < 0.65) {
+      const wantsClose = !g.scared && Math.random() < 0.65;
+      const wantsFar = g.scared && Math.random() < 0.75;
+      if (wantsClose || wantsFar) {
         options.sort((a, b) => {
           const da = Math.abs(a.pos.row - player.row) + Math.abs(a.pos.col - player.col);
           const db = Math.abs(b.pos.row - player.row) + Math.abs(b.pos.col - player.col);
-          return da - db;
+          return wantsClose ? da - db : db - da;
         });
         choice = options[0];
       } else {
@@ -344,32 +297,37 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
     const dIdx = dots.findIndex(d => d.row === player.row && d.col === player.col);
     if (dIdx >= 0) { dots.splice(dIdx, 1); score += 10; }
 
-    const bonus = bonuses.find(b => b.row === player.row && b.col === player.col && !b.collected);
-    if (bonus) {
-      if (bonus.number === nextExpected) {
-        bonus.collected = true;
-        score += 100 * bonus.number;
-        nextExpected += 1;
-        msgEl.textContent = "BONUS " + bonus.number + " OK!";
-      } else {
-        msgEl.textContent = "AINDA NAO -- PROXIMO E O " + nextExpected;
-      }
+    const pellet = pellets.find(p => p.row === player.row && p.col === player.col && !p.collected);
+    if (pellet) {
+      pellet.collected = true;
+      score += 50;
+      ghosts.forEach(g => { g.scared = true; g.scaredTimer = SCARED_TICKS; });
+      msgEl.textContent = "OS FANTASMAS ESTAO VULNERAVEIS!";
     }
     scoreEl.textContent = String(score).padStart(4, "0");
-    updateSeqHud();
 
-    if (ghosts.some(g => g.row === player.row && g.col === player.col)) {
-      lives -= 1;
-      livesEl.textContent = lives > 0 ? "● ".repeat(lives).trim() : "";
-      if (lives <= 0) {
-        endGame(false);
-      } else {
-        player.row = GAME_DATA.playerStart.row; player.col = GAME_DATA.playerStart.col;
-        dir = null; nextDir = null;
+    ghosts.forEach(g => {
+      if (g.row === player.row && g.col === player.col) {
+        if (g.scared) {
+          g.scared = false;
+          g.row = g.homeRow; g.col = g.homeCol;
+          score += 200;
+          msgEl.textContent = "FANTASMA COMIDO! +200";
+        } else {
+          lives -= 1;
+          livesEl.textContent = lives > 0 ? "● ".repeat(lives).trim() : "";
+          if (lives <= 0) {
+            endGame(false);
+          } else {
+            player.row = GAME_DATA.playerStart.row; player.col = GAME_DATA.playerStart.col;
+            dir = null; nextDir = null;
+          }
+        }
       }
-    }
+    });
+    scoreEl.textContent = String(score).padStart(4, "0");
 
-    if (dots.length === 0 && bonuses.every(b => b.collected)) {
+    if (dots.length === 0 && pellets.every(p => p.collected)) {
       endGame(true);
     }
   }
@@ -385,7 +343,8 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
   function drawGhost(g) {
     const gx = g.col * TILE + TILE / 2;
     const gy = g.row * TILE + TILE / 2;
-    ctx.fillStyle = g.color;
+    const flashing = g.scared && g.scaredTimer < 15 && Math.floor(frame / 4) % 2 === 0;
+    ctx.fillStyle = g.scared ? (flashing ? "#e8ecff" : "#2b4bff") : g.color;
     ctx.beginPath();
     ctx.arc(gx, gy, TILE / 2 - 4, Math.PI, 0);
     ctx.lineTo(gx + TILE / 2 - 4, gy + TILE / 2 - 4);
@@ -396,7 +355,15 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
     ctx.closePath();
     ctx.fill();
 
-    // olhos que acompanham a direcao do movimento
+    if (g.scared) {
+      ctx.fillStyle = "#fff";
+      [-3, 3].forEach(dx => {
+        ctx.beginPath();
+        ctx.arc(gx + dx, gy - 2, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      return;
+    }
     const offsets = {up: [0, -2], down: [0, 2], left: [-2, 0], right: [2, 0], undefined: [0, 0]};
     const [ox, oy] = offsets[g.facing] || [0, 0];
     [-3, 3].forEach(dx => {
@@ -434,24 +401,15 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
       ctx.fill();
     });
 
-    const pulse = 1 + 0.18 * Math.sin(frame / 8);
-    bonuses.forEach(b => {
-      if (b.collected) return;
-      const isNext = b.number === nextExpected;
-      const radius = (isNext ? 8 : 6) * (isNext ? pulse : 1);
+    const pulse = 1 + 0.3 * Math.sin(frame / 6);
+    ctx.fillStyle = "#fff8dc";
+    pellets.forEach(p => {
+      if (p.collected) return;
       ctx.beginPath();
-      ctx.arc(b.col * TILE + TILE / 2, b.row * TILE + TILE / 2, radius, 0, Math.PI * 2);
-      ctx.fillStyle = isNext ? "#ffd54f" : "#4a4f5e";
-      if (isNext) { ctx.shadowColor = "#ffd54f"; ctx.shadowBlur = 10; }
+      ctx.arc(p.col * TILE + TILE / 2, p.row * TILE + TILE / 2, 6 * pulse, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = isNext ? "#1a1a1a" : "#ccc";
-      ctx.font = "bold 9px 'JetBrains Mono', monospace";
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(String(b.number), b.col * TILE + TILE / 2, b.row * TILE + TILE / 2 + 1);
     });
 
-    // pac-man com boca animada
     const angles = {up: 0.5, down: 1.5, left: 1, right: 0, undefined: 0};
     const baseAngle = (angles[player.facing] ?? 0) * Math.PI;
     const mouthOpen = Math.abs(Math.sin(frame / 5)) * 0.24 * Math.PI + 0.03;
