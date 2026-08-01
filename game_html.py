@@ -3,12 +3,15 @@ game_html.py
 Monta o HTML/CSS/JS do mini Pac-Man (renderizado em <canvas>) que roda
 dentro do Streamlit via streamlit.components.v1.html.
 
+Identidade visual: gabinete de fliperama synthwave -- paredes do labirinto
+em gradiente ciano->magenta, HUD em fonte pixel, moldura CRT com scanlines,
+Pac-Man com boca animada e fantasmas com olhos que seguem o jogador.
+
 A "torcao" do jogo: existem bonus numerados (1, 2, 3...) espalhados no
 labirinto. Eles correspondem, em ordem, ao resultado da query SQL que o
-jogador resolveu na missao (ex: os clientes que mais compraram em 2024,
-do maior para o menor). O jogador so consegue "comer" o bonus de numero N
-depois de ja ter comido o bonus N-1 -- ou seja, ele precisa respeitar a
-mesma ordem (ORDER BY) que a query correta produziu.
+jogador resolveu na missao. O jogador so consegue "comer" o bonus de
+numero N depois de ja ter comido o bonus N-1 -- ou seja, ele precisa
+respeitar a mesma ordem (ORDER BY) que a query correta produziu.
 """
 
 import json
@@ -62,75 +65,120 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
 
     html = """
 <div id="pacman-root">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <style>
     #pacman-root {
-      font-family: 'Segoe UI', Arial, sans-serif;
+      --cyan: #08d9d6;
+      --magenta: #ff2e63;
+      --gold: #ffd54f;
+      --ok-green: #3ddc84;
+      font-family: 'JetBrains Mono', monospace;
       color: #f4f4f4;
-      background: #05070d;
-      border-radius: 12px;
+      background: radial-gradient(ellipse at 50% 0%, #1a1030 0%, #05040c 65%);
+      border-radius: 14px;
       padding: 16px;
       display: flex;
       flex-direction: column;
       align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+    #pacman-root::before {
+      content: "";
+      position: absolute; inset: 0; pointer-events: none; z-index: 5;
+      background: repeating-linear-gradient(
+        0deg, rgba(0,0,0,0.16) 0px, rgba(0,0,0,0.16) 1px,
+        transparent 2px, transparent 4px
+      );
+      mix-blend-mode: multiply;
     }
     #pacman-hud {
-      width: 100%;
-      max-width: 640px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-      font-size: 16px;
+      width: 100%; max-width: 620px;
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px; font-size: 13px; z-index: 2;
+      background: rgba(0,0,0,0.35); border: 1px solid rgba(8,217,214,0.35);
+      border-radius: 8px; padding: 8px 14px;
     }
-    #pacman-hud .lives { color: #ffcc00; }
-    #pacman-hud .score { color: #58d68d; }
+    #pacman-hud .lives { color: var(--gold); letter-spacing: 3px; }
+    #pacman-hud .score-val {
+      font-variant-numeric: tabular-nums; letter-spacing: 2px;
+      color: var(--ok-green); text-shadow: 0 0 8px rgba(61,220,132,0.6);
+    }
+    #hud-sequence b { color: var(--gold); text-shadow: 0 0 8px rgba(255,213,79,0.5); }
     #pacman-legend {
-      max-width: 640px;
-      width: 100%;
-      font-size: 13px;
-      margin-bottom: 10px;
-      color: #cfd3da;
-      line-height: 1.5;
+      max-width: 620px; width: 100%; font-size: 12px; margin-bottom: 10px;
+      color: #cfd3da; line-height: 1.6; z-index: 2; text-align: center;
     }
-    #pacman-legend b { color: #ffd54f; }
-    #pacman-canvas {
-      background: #000;
-      border: 3px solid #2a4dff;
-      border-radius: 8px;
-      box-shadow: 0 0 24px rgba(42, 77, 255, 0.45);
+    #pacman-legend b { color: var(--gold); }
+    .canvas-frame {
+      position: relative; z-index: 2;
+      padding: 10px;
+      border-radius: 14px;
+      background: linear-gradient(160deg, #14102a, #05040c);
+      border: 2px solid rgba(255,255,255,0.06);
+      box-shadow:
+        0 0 0 1px rgba(8,217,214,0.25),
+        0 0 40px rgba(255,46,99,0.18),
+        inset 0 0 30px rgba(0,0,0,0.6);
     }
+    #pacman-canvas { background: #000; border-radius: 6px; display: block; }
     #pacman-msg {
-      margin-top: 10px;
-      font-size: 15px;
-      min-height: 24px;
-      color: #ffd54f;
-      text-align: center;
+      margin-top: 12px; font-size: 13px; min-height: 20px;
+      color: var(--gold); text-align: center; z-index: 2;
+      font-family: 'Press Start 2P', monospace; letter-spacing: 0.5px;
     }
     #pacman-restart {
-      margin-top: 8px;
-      padding: 8px 18px;
-      background: #2a4dff;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      display: none;
+      margin-top: 10px; padding: 10px 20px;
+      background: var(--magenta); color: white; border: none; border-radius: 6px;
+      cursor: pointer; font-size: 12px; display: none; z-index: 2;
+      font-family: 'Press Start 2P', monospace; letter-spacing: 0.5px;
+      box-shadow: 0 0 16px rgba(255,46,99,0.5);
     }
-    #pacman-restart:hover { background: #1c37cc; }
+    #pacman-restart:hover { filter: brightness(1.15); }
+    #pacman-restart:focus-visible, .dpad-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+    /* D-pad para touch/mobile */
+    #dpad {
+      z-index: 2; margin-top: 14px; display: grid;
+      grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 52px);
+      gap: 6px; user-select: none;
+    }
+    .dpad-btn {
+      background: rgba(8,217,214,0.10); border: 1px solid rgba(8,217,214,0.5);
+      border-radius: 10px; color: var(--cyan); font-size: 20px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; touch-action: manipulation;
+    }
+    .dpad-btn:active { background: rgba(8,217,214,0.35); }
+    .dpad-empty { visibility: hidden; }
   </style>
 
   <div id="pacman-hud">
-    <div class="score">Pontos: <span id="hud-score">0</span></div>
-    <div id="hud-sequence">Proximo bonus: <b>1</b></div>
-    <div class="lives">Vidas: <span id="hud-lives">3</span></div>
+    <div>PONTOS <span class="score-val" id="hud-score">0000</span></div>
+    <div id="hud-sequence">BONUS &rarr; <b>1</b></div>
+    <div class="lives" id="hud-lives">● ● ●</div>
   </div>
 
   <div id="pacman-legend"></div>
 
-  <canvas id="pacman-canvas" width="588" height="588"></canvas>
-  <div id="pacman-msg">Use as setas do teclado (ou W A S D) para jogar</div>
-  <button id="pacman-restart">Jogar novamente</button>
+  <div class="canvas-frame">
+    <canvas id="pacman-canvas" width="588" height="588"></canvas>
+  </div>
+
+  <div id="pacman-msg">SETAS OU WASD PARA JOGAR</div>
+  <button id="pacman-restart">JOGAR NOVAMENTE</button>
+
+  <div id="dpad">
+    <div class="dpad-empty"></div>
+    <div class="dpad-btn" data-dir="up">▲</div>
+    <div class="dpad-empty"></div>
+    <div class="dpad-btn" data-dir="left">◀</div>
+    <div class="dpad-empty"></div>
+    <div class="dpad-btn" data-dir="right">▶</div>
+    <div class="dpad-empty"></div>
+    <div class="dpad-btn" data-dir="down">▼</div>
+    <div class="dpad-empty"></div>
+  </div>
 </div>
 
 <script>
@@ -150,18 +198,21 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
   const restartBtn = document.getElementById("pacman-restart");
   const legendEl = document.getElementById("pacman-legend");
 
-  // Legenda com a ordem de bonus esperada
+  // gradiente synthwave para as paredes (ciano no topo -> magenta embaixo)
+  const wallGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  wallGradient.addColorStop(0, "#08d9d6");
+  wallGradient.addColorStop(1, "#ff2e63");
+
   if (GAME_DATA.bonuses.length > 0) {
-    let legendHtml = "<b>Sequencia de bonus (ordem da sua query SQL):</b><br>";
+    let legendHtml = "<b>SEQUENCIA DE BONUS (ordem da sua query):</b><br>";
     legendHtml += GAME_DATA.bonuses.map(b => (b.number + ") " + b.label)).join(" &rarr; ");
     legendEl.innerHTML = legendHtml;
   } else {
     legendEl.innerHTML = "<b>Nenhum bonus numerado disponivel.</b>";
   }
 
-  let dots = [];       // {row, col}
-  let bonuses = [];     // {row, col, number, label, collected}
-  let player, ghosts, dir, nextDir, score, lives, nextExpected, gameOver, won, tickHandle;
+  let dots = [], bonuses = [], player, ghosts, dir, nextDir;
+  let score, lives, nextExpected, gameOver, tickHandle, frame = 0;
 
   function cellIsPath(r, c) {
     if (r < 0 || r >= rows || c < 0 || c >= cols) return false;
@@ -176,36 +227,33 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
       }
     }
     bonuses = GAME_DATA.bonuses.map(b => ({...b, collected: false}));
-    // remove dot regular nas celulas de bonus (o bonus substitui o pontinho)
     dots = dots.filter(d => !bonuses.some(b => b.row === d.row && b.col === d.col));
-    // remove dots nas posicoes iniciais de player/ghosts
     const ps = GAME_DATA.playerStart;
     dots = dots.filter(d => !(d.row === ps.row && d.col === ps.col));
 
-    player = {row: GAME_DATA.playerStart.row, col: GAME_DATA.playerStart.col};
-    ghosts = GAME_DATA.ghostStarts.map((g, i) => ({row: g.row, col: g.col, color: i === 0 ? "#ff4d4d" : "#ff8cff"}));
-    dir = null;
-    nextDir = null;
-    score = 0;
-    lives = 3;
-    nextExpected = 1;
-    gameOver = false;
-    won = false;
+    player = {row: ps.row, col: ps.col, facing: "left", mouthPhase: 0};
+    ghosts = GAME_DATA.ghostStarts.map((g, i) => ({
+      row: g.row, col: g.col, color: i === 0 ? "#ff2e63" : "#08d9d6", facing: "up",
+    }));
+    dir = null; nextDir = null;
+    score = 0; lives = 3; nextExpected = 1; gameOver = false;
 
-    scoreEl.textContent = score;
-    livesEl.textContent = lives;
+    scoreEl.textContent = String(score).padStart(4, "0");
+    livesEl.textContent = "● ".repeat(lives).trim();
     updateSeqHud();
-    msgEl.textContent = "Use as setas do teclado (ou W A S D) para jogar";
+    msgEl.textContent = "SETAS OU WASD PARA JOGAR";
     restartBtn.style.display = "none";
   }
 
   function updateSeqHud() {
     const remaining = bonuses.filter(b => !b.collected);
-    if (remaining.length === 0) {
-      seqEl.innerHTML = bonuses.length > 0 ? "Bonus: <b>todos coletados!</b>" : "";
+    if (bonuses.length === 0) {
+      seqEl.innerHTML = "";
+    } else if (remaining.length === 0) {
+      seqEl.innerHTML = "BONUS &rarr; <b>completo!</b>";
     } else {
       const nextB = bonuses.find(b => b.number === nextExpected);
-      seqEl.innerHTML = "Proximo bonus: <b>" + (nextB ? nextB.number + " (" + nextB.label + ")" : "-") + "</b>";
+      seqEl.innerHTML = "BONUS &rarr; <b>" + (nextB ? nextB.number : "-") + "</b>";
     }
   }
 
@@ -222,11 +270,11 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
   function movePlayer() {
     if (nextDir) {
       const moved = tryMove(player, nextDir);
-      if (moved) { player = moved; dir = nextDir; nextDir = null; return; }
+      if (moved) { player.row = moved.row; player.col = moved.col; dir = nextDir; player.facing = dir; nextDir = null; return; }
     }
     if (dir) {
       const moved = tryMove(player, dir);
-      if (moved) { player = moved; }
+      if (moved) { player.row = moved.row; player.col = moved.col; }
     }
   }
 
@@ -245,42 +293,35 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
       } else {
         choice = options[Math.floor(Math.random() * options.length)];
       }
-      g.row = choice.pos.row;
-      g.col = choice.pos.col;
+      g.row = choice.pos.row; g.col = choice.pos.col; g.facing = choice.d;
     });
   }
 
   function checkCollisions() {
-    // dots
     const dIdx = dots.findIndex(d => d.row === player.row && d.col === player.col);
-    if (dIdx >= 0) {
-      dots.splice(dIdx, 1);
-      score += 10;
-    }
-    // bonus (so conta se for o proximo esperado da sequencia)
+    if (dIdx >= 0) { dots.splice(dIdx, 1); score += 10; }
+
     const bonus = bonuses.find(b => b.row === player.row && b.col === player.col && !b.collected);
     if (bonus) {
       if (bonus.number === nextExpected) {
         bonus.collected = true;
         score += 100 * bonus.number;
         nextExpected += 1;
-        msgEl.textContent = "Bonus " + bonus.number + " (" + bonus.label + ") coletado!";
+        msgEl.textContent = "BONUS " + bonus.number + " OK!";
       } else {
-        msgEl.textContent = "Ainda nao! Esse bonus e o numero " + bonus.number +
-          ", mas o proximo da sequencia e o " + nextExpected + ".";
+        msgEl.textContent = "AINDA NAO -- PROXIMO E O " + nextExpected;
       }
     }
-    scoreEl.textContent = score;
+    scoreEl.textContent = String(score).padStart(4, "0");
     updateSeqHud();
 
-    // ghosts
     if (ghosts.some(g => g.row === player.row && g.col === player.col)) {
       lives -= 1;
-      livesEl.textContent = lives;
+      livesEl.textContent = lives > 0 ? "● ".repeat(lives).trim() : "";
       if (lives <= 0) {
         endGame(false);
       } else {
-        player = {row: GAME_DATA.playerStart.row, col: GAME_DATA.playerStart.col};
+        player.row = GAME_DATA.playerStart.row; player.col = GAME_DATA.playerStart.col;
         dir = null; nextDir = null;
       }
     }
@@ -292,27 +333,52 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
 
   function endGame(victory) {
     gameOver = true;
-    won = victory;
     clearInterval(tickHandle);
-    msgEl.textContent = victory
-      ? "Voce venceu! Todos os pontos e bonus foram coletados na ordem certa."
-      : "Fim de jogo! Os fantasmas pegaram voce.";
+    msgEl.textContent = victory ? "VOCE VENCEU!" : "FIM DE JOGO";
+    msgEl.style.color = victory ? "#3ddc84" : "#ff2e63";
     restartBtn.style.display = "inline-block";
+  }
+
+  function drawGhost(g) {
+    const gx = g.col * TILE + TILE / 2;
+    const gy = g.row * TILE + TILE / 2;
+    ctx.fillStyle = g.color;
+    ctx.beginPath();
+    ctx.arc(gx, gy, TILE / 2 - 4, Math.PI, 0);
+    ctx.lineTo(gx + TILE / 2 - 4, gy + TILE / 2 - 4);
+    for (let i = 0; i < 3; i++) {
+      ctx.lineTo(gx + TILE / 2 - 4 - (i + 0.5) * ((TILE - 8) / 3), gy + TILE / 2 - 4 - (i % 2 === 0 ? 5 : 0));
+    }
+    ctx.lineTo(gx - TILE / 2 + 4, gy + TILE / 2 - 4);
+    ctx.closePath();
+    ctx.fill();
+
+    // olhos que acompanham a direcao do movimento
+    const offsets = {up: [0, -2], down: [0, 2], left: [-2, 0], right: [2, 0], undefined: [0, 0]};
+    const [ox, oy] = offsets[g.facing] || [0, 0];
+    [-5, 5].forEach(dx => {
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(gx + dx, gy - 3, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#1a1a2e";
+      ctx.beginPath();
+      ctx.arc(gx + dx + ox, gy - 3 + oy, 2, 0, Math.PI * 2);
+      ctx.fill();
+    });
   }
 
   function draw() {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // paredes
-    ctx.fillStyle = "#132a91";
+    ctx.fillStyle = wallGradient;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        if (maze[r][c] === 1) ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
+        if (maze[r][c] === 1) ctx.fillRect(c * TILE + 1, r * TILE + 1, TILE - 2, TILE - 2);
       }
     }
 
-    // dots
     ctx.fillStyle = "#ffe082";
     dots.forEach(d => {
       ctx.beginPath();
@@ -320,45 +386,41 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
       ctx.fill();
     });
 
-    // bonus numerados
+    const pulse = 1 + 0.18 * Math.sin(frame / 8);
     bonuses.forEach(b => {
       if (b.collected) return;
       const isNext = b.number === nextExpected;
+      const radius = (isNext ? 11 : 9) * (isNext ? pulse : 1);
       ctx.beginPath();
-      ctx.arc(b.col * TILE + TILE / 2, b.row * TILE + TILE / 2, 11, 0, Math.PI * 2);
-      ctx.fillStyle = isNext ? "#ffd54f" : "#555b6e";
+      ctx.arc(b.col * TILE + TILE / 2, b.row * TILE + TILE / 2, radius, 0, Math.PI * 2);
+      ctx.fillStyle = isNext ? "#ffd54f" : "#4a4f5e";
+      if (isNext) { ctx.shadowColor = "#ffd54f"; ctx.shadowBlur = 10; }
       ctx.fill();
+      ctx.shadowBlur = 0;
       ctx.fillStyle = isNext ? "#1a1a1a" : "#ccc";
-      ctx.font = "bold 13px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
+      ctx.font = "bold 12px 'JetBrains Mono', monospace";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(String(b.number), b.col * TILE + TILE / 2, b.row * TILE + TILE / 2 + 1);
     });
 
-    // player (pac-man)
+    // pac-man com boca animada
+    const angles = {up: 0.5, down: 1.5, left: 1, right: 0, undefined: 0};
+    const baseAngle = (angles[player.facing] ?? 0) * Math.PI;
+    const mouthOpen = Math.abs(Math.sin(frame / 5)) * 0.24 * Math.PI + 0.03;
     ctx.fillStyle = "#ffe600";
     ctx.beginPath();
     const px = player.col * TILE + TILE / 2;
     const py = player.row * TILE + TILE / 2;
-    ctx.arc(px, py, TILE / 2 - 3, 0.25 * Math.PI, 1.75 * Math.PI);
+    ctx.arc(px, py, TILE / 2 - 3, baseAngle + mouthOpen, baseAngle - mouthOpen + Math.PI * 2);
     ctx.lineTo(px, py);
     ctx.fill();
 
-    // ghosts
-    ghosts.forEach(g => {
-      ctx.fillStyle = g.color;
-      const gx = g.col * TILE + TILE / 2;
-      const gy = g.row * TILE + TILE / 2;
-      ctx.beginPath();
-      ctx.arc(gx, gy, TILE / 2 - 4, Math.PI, 0);
-      ctx.lineTo(gx + TILE / 2 - 4, gy + TILE / 2 - 4);
-      ctx.lineTo(gx - TILE / 2 + 4, gy + TILE / 2 - 4);
-      ctx.fill();
-    });
+    ghosts.forEach(drawGhost);
   }
 
   function tick() {
     if (gameOver) return;
+    frame += 1;
     movePlayer();
     moveGhosts();
     checkCollisions();
@@ -372,14 +434,18 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
       "ArrowLeft": "left", "a": "left", "A": "left",
       "ArrowRight": "right", "d": "right", "D": "right",
     };
-    if (map[e.key]) {
-      nextDir = map[e.key];
-      e.preventDefault();
-    }
+    if (map[e.key]) { nextDir = map[e.key]; e.preventDefault(); }
+  });
+
+  document.querySelectorAll(".dpad-btn").forEach(btn => {
+    const setDir = (e) => { nextDir = btn.dataset.dir; e.preventDefault(); };
+    btn.addEventListener("touchstart", setDir, {passive: false});
+    btn.addEventListener("mousedown", setDir);
   });
 
   restartBtn.addEventListener("click", () => {
     resetState();
+    msgEl.style.color = "";
     draw();
     tickHandle = setInterval(tick, 160);
   });
