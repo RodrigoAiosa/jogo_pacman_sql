@@ -135,22 +135,7 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
       box-shadow: 0 0 16px rgba(255,46,99,0.5);
     }
     #pacman-restart:hover { filter: brightness(1.15); }
-    #pacman-restart:focus-visible, .dpad-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-
-    /* D-pad para touch/mobile */
-    #dpad {
-      z-index: 2; margin-top: 14px; display: grid;
-      grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 52px);
-      gap: 6px; user-select: none;
-    }
-    .dpad-btn {
-      background: rgba(8,217,214,0.10); border: 1px solid rgba(8,217,214,0.5);
-      border-radius: 10px; color: var(--cyan); font-size: 20px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; touch-action: manipulation;
-    }
-    .dpad-btn:active { background: rgba(8,217,214,0.35); }
-    .dpad-empty { visibility: hidden; }
+    #pacman-restart:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
   </style>
 
   <div id="pacman-hud">
@@ -167,18 +152,6 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
 
   <div id="pacman-msg">SETAS OU WASD PARA JOGAR</div>
   <button id="pacman-restart">JOGAR NOVAMENTE</button>
-
-  <div id="dpad">
-    <div class="dpad-empty"></div>
-    <div class="dpad-btn" data-dir="up">▲</div>
-    <div class="dpad-empty"></div>
-    <div class="dpad-btn" data-dir="left">◀</div>
-    <div class="dpad-empty"></div>
-    <div class="dpad-btn" data-dir="right">▶</div>
-    <div class="dpad-empty"></div>
-    <div class="dpad-btn" data-dir="down">▼</div>
-    <div class="dpad-empty"></div>
-  </div>
 </div>
 
 <script>
@@ -435,12 +408,6 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
       "ArrowRight": "right", "d": "right", "D": "right",
     };
     if (map[e.key]) { nextDir = map[e.key]; e.preventDefault(); }
-  });
-
-  document.querySelectorAll(".dpad-btn").forEach(btn => {
-    const setDir = (e) => { nextDir = btn.dataset.dir; e.preventDefault(); };
-    btn.addEventListener("touchstart", setDir, {passive: false});
-    btn.addEventListener("mousedown", setDir);
   });
 
   restartBtn.addEventListener("click", () => {
