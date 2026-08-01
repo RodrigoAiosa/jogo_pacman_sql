@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+vendas.db
+.venv/
+venv/
+.streamlit/secrets.toml
