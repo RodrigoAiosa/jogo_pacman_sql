@@ -17,27 +17,88 @@ respeitar a mesma ordem (ORDER BY) que a query correta produziu.
 import json
 from typing import List
 
+# Dimensoes reais do fliperama classico: 28 colunas x 31 linhas
+# (a tela original tinha 224x248px de area de labirinto, em tiles de 8px --
+# a mesma proporcao 28:31 usada aqui).
+MAZE_COLS = 28
+MAZE_ROWS = 31
+TILE_PX = 20  # 28*20=560 x 31*20=620, mantendo a proporcao original
 
-# Posicoes fixas (linha, coluna) para ate 6 bonus no labirinto 21x21.
+# Posicoes fixas (linha, coluna) para ate 6 bonus no labirinto 28x31.
+# Cantos do anel externo + centro-cima/centro-baixo, todos garantidamente
+# caminho no layout gerado por _build_maze().
 BONUS_POSITIONS = [
-    (1, 1), (1, 17), (9, 1), (9, 17), (17, 1), (17, 17),
+    (1, 1), (1, 26), (9, 13), (22, 14), (29, 1), (29, 26),
 ]
+
+# Codigos de celula do labirinto:
+#   0 = caminho com pastilha (dot)
+#   1 = parede do labirinto
+#   2 = parede da casa dos fantasmas (cor propria)
+#   3 = caminho livre sem pastilha (portao/tunel/interior da casa)
+PATH_DOT = 0
+WALL = 1
+HOUSE_WALL = 2
+PATH_EMPTY = 3
 
 
 def _build_maze() -> List[List[int]]:
-    """Gera um labirinto 21x21 em formato de grade (lattice):
-    linhas impares = corredor horizontal totalmente livre
-    colunas pares em linhas pares = corredor vertical
-    0 = caminho, 1 = parede
+    """Gera um labirinto 28x31 ORIGINAL, nas proporcoes reais do fliperama
+    classico (nao e uma copia do mapa da Namco, que e uma obra protegida
+    por direitos autorais): anel externo percorrivel, tunel lateral que
+    teleporta de um lado para o outro, casa de fantasmas central com
+    portao, e blocos internos simetricos em varias faixas.
     """
-    size = 21
-    maze = [[1 for _ in range(size)] for _ in range(size)]
-    for r in range(1, size - 1):
-        for c in range(1, size - 1):
-            if r % 2 == 1:
-                maze[r][c] = 0
-            elif c % 2 == 0:
-                maze[r][c] = 0
+    cols, rows = MAZE_COLS, MAZE_ROWS
+    maze = [[WALL for _ in range(cols)] for _ in range(rows)]
+
+    # anel externo (linha/coluna 1 ate rows-2/cols-2) todo caminho
+    for c in range(1, cols - 1):
+        maze[1][c] = PATH_DOT
+        maze[rows - 2][c] = PATH_DOT
+    for r in range(1, rows - 1):
+        maze[r][1] = PATH_DOT
+        maze[r][cols - 2] = PATH_DOT
+
+    # interior: caminho livre por padrao, depois "esculpimos" os blocos
+    for r in range(2, rows - 2):
+        for c in range(2, cols - 2):
+            maze[r][c] = PATH_DOT
+
+    # blocos internos simetricos (espelhados esquerda/direita), em duas
+    # faixas de linhas (topo e fundo), deixando a faixa central (onde fica
+    # a casa dos fantasmas e o corredor de acesso a ela) totalmente livre
+    block_rows = [(3, 6), (24, 27)]
+    block_col_groups = [(2, 4), (7, 9)]  # espelhados no lado direito
+    for r0, r1 in block_rows:
+        for c0, c1 in block_col_groups:
+            for r in range(r0, r1 + 1):
+                for c in range(c0, c1 + 1):
+                    maze[r][c] = WALL
+                    mirror_c = cols - 1 - c
+                    maze[r][mirror_c] = WALL
+
+    # casa dos fantasmas (colunas 12..15, linhas 14..18) com portao de 2
+    # celulas no topo
+    house_c0, house_c1 = 12, 15
+    house_r0, house_r1 = 14, 18
+    for c in range(house_c0, house_c1 + 1):
+        maze[house_r0][c] = HOUSE_WALL
+        maze[house_r1][c] = HOUSE_WALL
+    for r in range(house_r0, house_r1 + 1):
+        maze[r][house_c0] = HOUSE_WALL
+        maze[r][house_c1] = HOUSE_WALL
+    for r in range(house_r0 + 1, house_r1):
+        for c in range(house_c0 + 1, house_c1):
+            maze[r][c] = PATH_EMPTY
+    maze[house_r0][13] = PATH_EMPTY  # portao (gate), 2 celulas no topo
+    maze[house_r0][14] = PATH_EMPTY
+
+    # tunel: linha do meio, abre as bordas para teleporte lateral
+    tunnel_row = rows // 2
+    maze[tunnel_row][0] = PATH_EMPTY
+    maze[tunnel_row][cols - 1] = PATH_EMPTY
+
     return maze
 
 
@@ -58,8 +119,8 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
     data = {
         "maze": maze,
         "bonuses": bonuses,
-        "playerStart": {"row": 19, "col": 10},
-        "ghostStarts": [{"row": 9, "col": 9}, {"row": 9, "col": 11}],
+        "playerStart": {"row": 25, "col": 13},
+        "ghostStarts": [{"row": 16, "col": 13}, {"row": 16, "col": 14}],
     }
     data_json = json.dumps(data)
 
@@ -147,7 +208,7 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
   <div id="pacman-legend"></div>
 
   <div class="canvas-frame">
-    <canvas id="pacman-canvas" width="588" height="588"></canvas>
+    <canvas id="pacman-canvas" width="560" height="620"></canvas>
   </div>
 
   <div id="pacman-msg">SETAS OU WASD PARA JOGAR</div>
@@ -157,7 +218,7 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
 <script>
 (function() {
   const GAME_DATA = __DATA_JSON__;
-  const TILE = 28;
+  const TILE = 20;
   const maze = GAME_DATA.maze;
   const rows = maze.length;
   const cols = maze[0].length;
@@ -189,7 +250,11 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
 
   function cellIsPath(r, c) {
     if (r < 0 || r >= rows || c < 0 || c >= cols) return false;
-    return maze[r][c] === 0;
+    return maze[r][c] === 0 || maze[r][c] === 3;
+  }
+
+  function isWallCell(r, c) {
+    return maze[r][c] === 1 || maze[r][c] === 2;
   }
 
   function resetState() {
@@ -236,6 +301,11 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
     else if (direction === "down") row += 1;
     else if (direction === "left") col -= 1;
     else if (direction === "right") col += 1;
+
+    // tunel: sair por uma borda lateral aberta teleporta para o outro lado
+    if (col < 0 && cellIsPath(row, cols - 1)) return {row, col: cols - 1};
+    if (col >= cols && cellIsPath(row, 0)) return {row, col: 0};
+
     if (cellIsPath(row, col)) return {row, col};
     return null;
   }
@@ -329,14 +399,14 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
     // olhos que acompanham a direcao do movimento
     const offsets = {up: [0, -2], down: [0, 2], left: [-2, 0], right: [2, 0], undefined: [0, 0]};
     const [ox, oy] = offsets[g.facing] || [0, 0];
-    [-5, 5].forEach(dx => {
+    [-3, 3].forEach(dx => {
       ctx.fillStyle = "#fff";
       ctx.beginPath();
-      ctx.arc(gx + dx, gy - 3, 4, 0, Math.PI * 2);
+      ctx.arc(gx + dx, gy - 2, 2, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = "#1a1a2e";
       ctx.beginPath();
-      ctx.arc(gx + dx + ox, gy - 3 + oy, 2, 0, Math.PI * 2);
+      ctx.arc(gx + dx + ox, gy - 2 + oy, 1, 0, Math.PI * 2);
       ctx.fill();
     });
   }
@@ -345,17 +415,22 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    ctx.fillStyle = wallGradient;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        if (maze[r][c] === 1) ctx.fillRect(c * TILE + 1, r * TILE + 1, TILE - 2, TILE - 2);
+        if (maze[r][c] === 1) {
+          ctx.fillStyle = wallGradient;
+          ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
+        } else if (maze[r][c] === 2) {
+          ctx.fillStyle = "rgba(255, 46, 99, 0.55)";
+          ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
+        }
       }
     }
 
     ctx.fillStyle = "#ffe082";
     dots.forEach(d => {
       ctx.beginPath();
-      ctx.arc(d.col * TILE + TILE / 2, d.row * TILE + TILE / 2, 3, 0, Math.PI * 2);
+      ctx.arc(d.col * TILE + TILE / 2, d.row * TILE + TILE / 2, 2, 0, Math.PI * 2);
       ctx.fill();
     });
 
@@ -363,7 +438,7 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
     bonuses.forEach(b => {
       if (b.collected) return;
       const isNext = b.number === nextExpected;
-      const radius = (isNext ? 11 : 9) * (isNext ? pulse : 1);
+      const radius = (isNext ? 8 : 6) * (isNext ? pulse : 1);
       ctx.beginPath();
       ctx.arc(b.col * TILE + TILE / 2, b.row * TILE + TILE / 2, radius, 0, Math.PI * 2);
       ctx.fillStyle = isNext ? "#ffd54f" : "#4a4f5e";
@@ -371,7 +446,7 @@ def build_game_html(sequence_labels: List[str], height: int = 700) -> str:
       ctx.fill();
       ctx.shadowBlur = 0;
       ctx.fillStyle = isNext ? "#1a1a1a" : "#ccc";
-      ctx.font = "bold 12px 'JetBrains Mono', monospace";
+      ctx.font = "bold 9px 'JetBrains Mono', monospace";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(String(b.number), b.col * TILE + TILE / 2, b.row * TILE + TILE / 2 + 1);
     });
