@@ -165,7 +165,7 @@ elif st.session_state.stage == "jogo":
     st.html(render_sequence_chips(st.session_state.sequence))
 
     html = build_game_html(st.session_state.sequence)
-    components.html(html, height=780, scrolling=False)
+    components.html(html, height=920, scrolling=False)
 
     if st.button("⬅ VOLTAR PARA A MISSAO"):
         st.session_state.stage = "missao"
