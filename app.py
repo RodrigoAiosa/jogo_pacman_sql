@@ -9,6 +9,13 @@ Fluxo:
 3) Se todos passarem, a tela de "ACESSO LIBERADO" aparece e o jogo e liberado.
 4) O jogo Pac-Man (fliperama synthwave) e renderizado com bonus numerados
    que devem ser coletados na mesma ordem retornada pela query.
+
+Nota de implementacao: todo HTML/CSS bruto e injetado com st.html() (nao
+st.markdown(..., unsafe_allow_html=True)). st.markdown roda o conteudo por
+um parser de Markdown antes de liberar o HTML, e linhas de CSS/HTML
+indentadas com 4+ espacos sao interpretadas como bloco de codigo (regra do
+Markdown), escapando as tags e fazendo o CSS aparecer como texto na tela em
+vez de ser aplicado. st.html() injeta o HTML diretamente, sem esse parser.
 """
 
 import pandas as pd
@@ -18,7 +25,6 @@ import streamlit.components.v1 as components
 from database import build_database
 from game_html import build_game_html
 from sql_missions import (
-    CANONICAL_QUERY,
     MISSION_CODE,
     MISSION_DESCRIPTION,
     MISSION_HINT,
@@ -29,13 +35,14 @@ from sql_missions import (
 )
 from theme import (
     CUSTOM_CSS,
+    inline_code,
     render_checklist,
     render_sequence_chips,
     render_terminal_header,
 )
 
 st.set_page_config(page_title="Pac-Man SQL Quest", page_icon="👾", layout="centered")
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+st.html(CUSTOM_CSS)
 
 # ---------------------------------------------------------------------------
 # Estado inicial
@@ -68,23 +75,20 @@ if "query_text" not in st.session_state:
 # Etapa 1: Missao (terminal)
 # ---------------------------------------------------------------------------
 if st.session_state.stage == "missao":
-    st.markdown(render_terminal_header("MISSION-TERMINAL v1.0"), unsafe_allow_html=True)
+    st.html(render_terminal_header("MISSION-TERMINAL v1.0"))
 
     result = st.session_state.last_result
     checklist_statuses = result.checklist if result else ["pending"] * len(REQUIREMENTS)
 
-    st.markdown(
-        f"""
+    st.html(f"""
         <div class="term-panel">
             <div class="mission-eyebrow">{MISSION_CODE} // ACESSO RESTRITO</div>
             <div class="mission-title">{MISSION_TITLE}</div>
-            <p style="margin-top:-6px;">{MISSION_DESCRIPTION}</p>
+            <p style="margin-top:-6px;">{inline_code(MISSION_DESCRIPTION)}</p>
             {render_checklist(REQUIREMENTS, checklist_statuses)}
-            <div class="mission-hint">{MISSION_HINT}</div>
+            <div class="mission-hint">{inline_code(MISSION_HINT)}</div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    """)
 
     st.session_state.query_text = st.text_area(
         "QUERY.SQL",
@@ -121,18 +125,15 @@ if st.session_state.stage == "missao":
             st.error(resultado.message)
 
 elif st.session_state.stage == "pronto_para_jogo":
-    st.markdown(
-        """
+    st.html("""
         <div class="access-granted">
             <div class="tag">✓ ACESSO LIBERADO</div>
             <p style="margin:8px 0 0; color:#f4e9c1;">Sua query bateu com o gabarito. O fliperama esta pronto.</p>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    """)
 
     st.markdown("**Sequencia de bonus liberada (na ordem do seu `ORDER BY`):**")
-    st.markdown(render_sequence_chips(st.session_state.sequence), unsafe_allow_html=True)
+    st.html(render_sequence_chips(st.session_state.sequence))
     st.caption(
         "No jogo, cada bonus numerado so pode ser coletado depois do anterior -- "
         "a mesma ordem que sua query retornou."
@@ -152,8 +153,8 @@ elif st.session_state.stage == "pronto_para_jogo":
 # Etapa 2: Jogo (fliperama)
 # ---------------------------------------------------------------------------
 elif st.session_state.stage == "jogo":
-    st.markdown('<div class="arcade-marquee">PAC-MAN SQL QUEST</div>', unsafe_allow_html=True)
-    st.markdown(render_sequence_chips(st.session_state.sequence), unsafe_allow_html=True)
+    st.html('<div class="arcade-marquee">PAC-MAN SQL QUEST</div>')
+    st.html(render_sequence_chips(st.session_state.sequence))
 
     html = build_game_html(st.session_state.sequence)
     components.html(html, height=860, scrolling=False)
